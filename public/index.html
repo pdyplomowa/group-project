@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>Group project</title>
+  <script src="https://unpkg.com/vue"></script>
+  <style>
+    .resources {
+      display: flex;
+    }
+
+    .app-heading {
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .resources-box {
+      flex: 1 1 auto;
+      margin: 8px;
+      border: 1px solid gray;
+      padding: 8px;
+    }
+
+    .resources-title {
+      margin: 0;
+    }
+
+    .resources-item {
+      margin: 4px 0;
+    }
+
+    .queue-items-count {
+      font-size: smaller;
+      float: right;
+    }
+
+    .client-state-queue {
+      color: #e4cd05;
+    }
+
+    .client-state-match {
+      color: #3cb043;
+    }
+
+    .client-action {
+      margin: 0 2px;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="app">
+    <h1>Matchmaking app - group project</h1>
+    <div class="app-heading">
+      <div>
+        <button type="button"
+                :disabled="isRequesting"
+                v-on:click="clearResources">Clear</button>
+        <button type="button"
+                :disabled="isRequesting"
+                v-on:click="fetchResources">Refresh</button>
+      </div>
+      <span v-if="isRequesting">Refreshing...</span>
+    </div>
+    <div class="resources">
+      <div class="resources-box">
+        <h3 class="resources-title">Clients</h3>
+        <ul>
+          <li v-for="client in clients"
+              :key="client.id"
+              class="resources-item">
+            <span>{{ client.id }}</span>
+            <span v-if="client.isQueued"
+                  class="client-state-queue">In queue</span>
+            <span v-if="client.matchId"
+                  class="client-state-match">Match ID: {{ client.matchId }}</span>
+            <button type="button"
+                    :disabled="isRequesting"
+                    v-on:click="deleteClient(client.id)"
+                    class="client-action">Delete</button>
+            <button v-if="client.isQueued"
+                    type="button"
+                    :disabled="isRequesting"
+                    v-on:click="leaveQueue(client.id)"
+                    class="client-action">Leave queue</button>
+            <button v-if="client.matchId"
+                    type="button"
+                    :disabled="isRequesting"
+                    v-on:click="leaveMatch(client.id)"
+                    class="client-action">Leave match</button>
+            <button v-if="!client.isQueued && !client.matchId"
+                    type="button"
+                    :disabled="isRequesting"
+                    v-on:click="addClientToQueue(client.id)"
+                    class="client-action">Add to queue</button>
+          </li>
+        </ul>
+        <label for="client-text-box">Client id</label>
+        <input id="client-text-box"
+               v-model="newClientId">
+        <button type="button"
+                :disabled="isRequesting"
+                v-on:click="addClient">Add client</button>
+      </div>
+      <div class="resources-box">
+        <h3 class="resources-title">
+          <span>Queue</span>
+          <span class="queue-items-count">{{queueClients.length + '/' + queueSize}}</span>
+        </h3>
+        <ul>
+          <li v-for="client in queueClients"
+              :key="client.id">{{ client.id }}</li>
+        </ul>
+        <label for="queue-size-num-box">Queue size</label>
+        <input id="queue-size-num-box"
+               type="number"
+               value="queueSize"
+               v-model="newQueueSize"
+               min="1">
+        <button type="button"
+                v-on:click="updateQueueSize"
+                :disabled="isRequesting">Update</button>
+      </div>
+      <div class="resources-box">
+        <h3 class="resources-title">Matches</h3>
+        <ul>
+          <li v-for="clients in clientsByMatch"
+              :key="clients[0].matchId">
+            <p>{{ clients[0].matchId }}</p>
+            <ol>
+              <li v-for="client in clients"
+                  :key="client.id">{{ client.id }}</li>
+            </ol>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    var app = new Vue({
+      el: '#app',
+      data: {
+        newClientId: '',
+        newQueueSize: null,
+        isRequesting: false,
+        clients: [],
+        queueSize: 5,
+      },
+      created() {
+        this.fetchResources();
+      },
+      computed: {
+        queueClients() {
+          return this.clients.filter(client => client.isQueued);
+        },
+        clientsByMatch() {
+          return Object.values(this.clients.filter(client => client.matchId).reduce((matches, client) => {
+            if (!matches[client.matchId]) {
+              matches[client.matchId] = [];
+            }
+            matches[client.matchId].push(client);
+            return matches;
+          }, {}));
+        }
+      },
+      methods: {
+        handleRequest(requestCb) {
+          this.isRequesting = true;
+          requestCb()
+            .then(res => res.json())
+            .then(resources => {
+              Object.assign(this, resources)
+              this.isRequesting = false;
+            })
+            .catch((err) => {
+              this.isRequesting = false;
+              console.error(err)
+            })
+        },
+        fetchResources() {
+          this.handleRequest(() => fetch('/resources'))
+        },
+        clearResources() {
+          this.handleRequest(() => fetch('/resources', { method: 'DELETE' }))
+        },
+        addClient() {
+          const newClientId = this.newClientId && this.newClientId.trim();
+          this.newClientId = '';
+          if (newClientId && !this.clients.map(client => client.id).includes(newClientId)) {
+            this.handleRequest(() => fetch('/clients', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ id: newClientId }),
+            }))
+          }
+        },
+        deleteClient(clientId) {
+          this.handleRequest(() => fetch('/clients/' + clientId, { method: 'DELETE' }))
+        },
+        addClientToQueue(clientId) {
+          this.handleRequest(() => fetch('/queue/client/' + clientId, { method: 'PUT' }))
+        },
+        updateQueueSize() {
+          const newQueueSize = parseInt(this.newQueueSize)
+          this.newQueueSize = null;
+          if (Number.isInteger(newQueueSize) && newQueueSize >= 1) {
+            this.handleRequest(() => fetch('/queue/size/' + newQueueSize, { method: 'PUT' }))
+          }
+        },
+        leaveQueue(clientId) {
+          this.handleRequest(() => fetch('/queue/leave/' + clientId, { method: 'PUT' }));
+        },
+        leaveMatch(clientId) {
+          this.handleRequest(() => fetch('/match/leave/' + clientId, { method: 'PUT' }))
+        }
+      }
+    })
+  </script>
+</body>
+
+</html>
