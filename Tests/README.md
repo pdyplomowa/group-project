@@ -3,7 +3,7 @@
 Add tests for all endpoints in application
 
 Graph:
-![Graph result](https://https://github.com/pdyplomowa/group-project/tree/master/Tests/GraphResults.png "Graph result")
+![Graph result](https://github.com/pdyplomowa/group-project/blob/master/Tests/GraphResult.png "Graph result")
 
 ## Dane
 
